@@ -1,2 +1,11 @@
 __pycache__/
-*.pyc 
+*.pyc
+.venv/
+.venv311/
+venv/
+ENV/
+.env/
+.DS_Store
+.vscode/
+.python-version
+storage/audio/

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, UploadFile, File
 from starlette.websockets import WebSocketDisconnect
+import os
+from app.audio_utils import extract_and_save_embedding, get_storage_audio_path
 
 router = APIRouter()
 
@@ -7,6 +9,16 @@ router = APIRouter()
 async def get_report(user_id: int):
     # 예시 데이터
     return {"user_id": user_id, "report": "감정 분석 결과"}
+
+@router.post("/embed-audio/")
+async def embed_audio(file: UploadFile = File(...)):
+    upload_dir = get_storage_audio_path("uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+    embedding_path = extract_and_save_embedding(file_path)
+    return {"embedding_file": embedding_path}
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

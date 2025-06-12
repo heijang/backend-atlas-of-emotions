@@ -1,2 +1,9 @@
 fastapi
-uvicorn 
+uvicorn
+starlette
+speechbrain
+torch
+numpy
+soundfile
+scipy 
+python-multipart
