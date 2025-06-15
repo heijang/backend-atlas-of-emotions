@@ -1,9 +1,11 @@
 fastapi
 uvicorn
-starlette
+fastapi-socketio
+python-socketio[asyncio]
 speechbrain
 torch
 numpy
 soundfile
-scipy 
+scipy
 python-multipart
+google-cloud-speech

@@ -9,3 +9,4 @@ ENV/
 .vscode/
 .python-version
 storage/audio/
+resources/
