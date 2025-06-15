@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 .venv311/
 venv/
-ENV/
+ENV/.env
 .env/
 .DS_Store
 .vscode/

@@ -4,8 +4,7 @@ from datetime import datetime
 import os
 import tempfile
 import wave
-from app.streaming_audio import google_stt_streaming, google_stt_sync, speech_client
-from google.cloud import speech_v1p1beta1 as speech
+from app.streaming_audio import get_streaming_stt_provider, get_sync_stt_provider
 
 router = APIRouter()
 
@@ -42,7 +41,7 @@ async def websocket_endpoint(websocket: WebSocket):
             while len(buffer) >= CHUNK_SIZE:
                 chunk_bytes = buffer[:CHUNK_SIZE]
                 del buffer[:CHUNK_SIZE]
-                transcript = google_stt_streaming(chunk_bytes)
+                transcript = get_streaming_stt_provider().streaming(chunk_bytes)
                 if transcript:
                     await websocket.send_text(f"실시간 STT: {transcript}")
     except WebSocketDisconnect:
@@ -64,5 +63,5 @@ async def websocket_endpoint(websocket: WebSocket):
             os.remove(temp_path)
             with open(wav_path, "rb") as f:
                 full_audio = f.read()
-            final_result = google_stt_sync(full_audio)
+            final_result = get_sync_stt_provider().sync(full_audio)
             print(f"[최종 STT] {final_result}") 

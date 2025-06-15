@@ -25,7 +25,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 
 # Build a path to the .env file from the script's location for robust loading
-dotenv_path = Path(__file__).parent / ".env"
+dotenv_path = Path(__file__).parent.parent / "ENV" / ".env"
 if dotenv_path.exists():
     print(f"Loading .env file from: {dotenv_path}")
     load_dotenv(dotenv_path=dotenv_path)

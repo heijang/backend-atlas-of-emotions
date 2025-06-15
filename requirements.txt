@@ -9,3 +9,4 @@ soundfile
 scipy
 python-multipart
 google-cloud-speech
+dotenv

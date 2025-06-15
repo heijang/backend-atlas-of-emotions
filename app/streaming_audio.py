@@ -8,6 +8,8 @@ import wave
 import queue
 import threading
 from collections import defaultdict
+from dotenv import load_dotenv
+from pathlib import Path
 
 # =====================
 # Google Cloud 인증 설정 (resources 폴더)
@@ -34,6 +36,55 @@ session_threads = {}  # 세션별 STT 스레드
 
 # Google STT 클라이언트
 speech_client = speech.SpeechClient()
+
+# =====================
+# STT Provider Abstraction
+# =====================
+
+class GoogleSTTProvider:
+    def streaming(self, audio_bytes):
+        return google_stt_streaming(audio_bytes)
+    def sync(self, audio_bytes):
+        return google_stt_sync(audio_bytes)
+
+def get_clova_client():
+    from example.clova_speech_client import ClovaSpeechClient
+    return ClovaSpeechClient()
+
+class ClovaSTTProvider:
+    def __init__(self):
+        self.client = get_clova_client()
+    def streaming(self, audio_bytes):
+        # Clova는 동기 방식만 지원하므로 streaming도 sync로 처리
+        result = self.client.recognize(audio_bytes)
+        if result and 'text' in result:
+            return result['text']
+        return ""
+    def sync(self, audio_bytes):
+        result = self.client.recognize(audio_bytes)
+        if result and 'text' in result:
+            return result['text']
+        return ""
+
+# 선택적으로 사용할 수 있도록 provider를 선택
+STT_PROVIDERS = {
+    'google': GoogleSTTProvider(),
+    'clova': ClovaSTTProvider(),
+}
+
+# 기본 provider (환경변수 또는 코드에서 변경 가능)
+def get_stt_provider():
+    import os
+    provider = os.getenv('STT_PROVIDER', 'clova')  # 기본값 clova
+    return STT_PROVIDERS.get(provider, ClovaSTTProvider())
+
+# chunk 단위 STT는 구글, 최종 STT는 클로바를 사용하도록 provider 분리
+
+def get_streaming_stt_provider():
+    return GoogleSTTProvider()
+
+def get_sync_stt_provider():
+    return ClovaSTTProvider()
 
 # 연결 시 파일/버퍼 초기화
 def start_streaming_session(sid):
@@ -213,4 +264,6 @@ def stt_streaming_worker(sid, q):
                     else:
                         print(f"[실시간 STT:INTERIM] {transcript}")
     except Exception as e:
-        print(f"[STT 에러] {e}") 
+        print(f"[STT 에러] {e}")
+
+load_dotenv(dotenv_path=Path(__file__).parent.parent / "ENV" / ".env") 
