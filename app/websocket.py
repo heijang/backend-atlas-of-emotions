@@ -64,4 +64,9 @@ async def websocket_endpoint(websocket: WebSocket):
             with open(wav_path, "rb") as f:
                 full_audio = f.read()
             final_result = get_sync_stt_provider().sync(full_audio)
-            print(f"[최종 STT] {final_result}") 
+            if isinstance(final_result, list):
+                print("[최종 STT - Clova diarization 결과]")
+                for i, seg in enumerate(final_result):
+                    print(f"[Segment {i+1}] Speaker: {seg.get('speaker')} | Text: {seg.get('text')}")
+            else:
+                print(f"[최종 STT] {final_result}") 

@@ -62,9 +62,24 @@ class ClovaSTTProvider:
         return ""
     def sync(self, audio_bytes):
         result = self.client.recognize(audio_bytes)
+        # If diarization segments are present, print and return them
+        if result and 'segments' in result:
+            print('=== Clova diarization segments ===')
+            segments = []
+            for i, segment in enumerate(result['segments']):
+                text = segment.get('text', '').strip()
+                speaker_id = segment.get('speaker')
+                start = segment.get('start')
+                end = segment.get('end')
+                print(f"[Segment {i+1}] Speaker: {speaker_id} | Start: {start} | End: {end} | Text: {text}")
+                if text:
+                    segments.append({'speaker': speaker_id, 'text': text, 'start': start, 'end': end})
+            print(f"STT with diarization: {len(segments)} segments found.")
+            return segments
+        # Fallback: return text only
         if result and 'text' in result:
-            return result['text']
-        return ""
+            return [{'speaker': None, 'text': result['text'], 'start': None, 'end': None}]
+        return []
 
 # 선택적으로 사용할 수 있도록 provider를 선택
 STT_PROVIDERS = {
