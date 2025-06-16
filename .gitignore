@@ -9,4 +9,4 @@ ENV/.env
 .vscode/
 .python-version
 storage/audio/
-resources/
+resources/service-account.json

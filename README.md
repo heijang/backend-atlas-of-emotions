@@ -1,6 +1,6 @@
 ## 감정도감 백엔드
 
-### 환경 변수 설정
+### 환경 변수 및 인증 파일 설정
 
 - `ENV/.env_example` 파일을 `ENV/.env`로 복사한 뒤, 아래 항목을 반드시 채워주세요:
   - CLOVA_SECRET_KEY
@@ -19,6 +19,10 @@
   POSTGRES_DB=emotion
   POSTGRES_USER=postgres
   POSTGRES_PASSWORD=비밀번호
+
+- Google Cloud 인증을 위해 `resources/service-account.json` 파일이 필요합니다.
+  - `resources/service-account_example.json` 파일을 복사하여 `resources/service-account.json`으로 만들고,
+  - 실제 Google Cloud 서비스 계정 정보를 입력하세요.
 
 ---
 
