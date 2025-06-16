@@ -1,5 +1,5 @@
-fastapi
-uvicorn
+fastapi>=0.100.0
+uvicorn>=0.23.0
 fastapi-socketio
 python-socketio[asyncio]
 speechbrain
@@ -8,5 +8,8 @@ numpy
 soundfile
 scipy
 python-multipart
-google-cloud-speech
-dotenv
+google-cloud-speech>=2.0.0
+google-generativeai>=0.8.0
+python-dotenv>=1.0.0
+librosa
+psycopg2-binary

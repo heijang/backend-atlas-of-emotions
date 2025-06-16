@@ -11,6 +11,12 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from pathlib import Path
 
+# --- 환경변수 로드 (.env) ---
+dotenv_path = Path(__file__).parent.parent / "ENV" / ".env"
+if dotenv_path.exists():
+    load_dotenv(dotenv_path=dotenv_path)
+# --------------------------
+
 # =====================
 # Google Cloud 인증 설정 (resources 폴더)
 # =====================
