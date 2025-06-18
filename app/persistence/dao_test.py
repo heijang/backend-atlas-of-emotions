@@ -9,6 +9,7 @@ DAO 테스트 스크립트 사용법
 """
 import sys
 from .report_dao import ReportDAO
+from .user_dao import UserDAO
 
 def test_connect():
     dao = ReportDAO()
@@ -31,6 +32,29 @@ def test_get_user_conversations_with_emotions(user_id):
     finally:
         dao.close()
 
+def test_register_user(user_id, user_name):
+    dao = UserDAO()
+    try:
+        dao.register_user(user_id, user_name)
+        print(f"User registered: {user_id}, {user_name}")
+    except Exception as e:
+        print(f"User registration failed: {e}")
+    finally:
+        dao.close()
+
+def test_login_user(user_id):
+    dao = UserDAO()
+    try:
+        user = dao.get_user_by_id(user_id)
+        if user:
+            print(f"User found: {user}")
+        else:
+            print("User not found")
+    except Exception as e:
+        print(f"Login failed: {e}")
+    finally:
+        dao.close()
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise ValueError("인자가 맞지 않습니다.")
@@ -42,5 +66,16 @@ if __name__ == "__main__":
             raise ValueError("인자가 맞지 않습니다.")
         user_id = sys.argv[2]
         test_get_user_conversations_with_emotions(user_id)
+    elif cmd == "register_user":
+        if len(sys.argv) < 4:
+            raise ValueError("인자가 맞지 않습니다.")
+        user_id = sys.argv[2]
+        user_name = sys.argv[3]
+        test_register_user(user_id, user_name)
+    elif cmd == "login_user":
+        if len(sys.argv) < 3:
+            raise ValueError("인자가 맞지 않습니다.")
+        user_id = sys.argv[2]
+        test_login_user(user_id)
     else:
         raise ValueError("인자가 맞지 않습니다.") 

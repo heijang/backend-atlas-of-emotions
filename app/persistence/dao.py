@@ -34,6 +34,7 @@ class PostgresDAO:
             self.connect()
         with self.conn.cursor() as cur:
             cur.execute(query, params)
+            self.conn.commit()
             if cur.description:
                 return cur.fetchall()
             return None

@@ -9,13 +9,14 @@ class ReportDAO(PostgresDAO):
         sentence TEXT,
         speaker VARCHAR(16),
         emotion_score JSONB,  -- {"positive":0.7, "negative":0.2, ...}
-        emotion_text VARCHAR(32)  -- 예: '긍정', '부정', '중립' 등
+        emotion_text VARCHAR(32),  -- 예: '긍정', '부정', '중립' 등
+        registered_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """
     def get_user_conversations_with_emotions(self, user_id):
         conn = self.get_connection()
         query = """
-            SELECT sentence, speaker, emotion_score, emotion_text
+            SELECT sentence, speaker, emotion_score, emotion_text, registered_datetime
             FROM user_conversations
             WHERE user_id = %s
             ORDER BY id ASC
@@ -23,15 +24,16 @@ class ReportDAO(PostgresDAO):
         with conn.cursor() as cur:
             cur.execute(query, (user_id,))
             rows = cur.fetchall()
-            # 컬럼: sentence, speaker, emotion_score, emotion_text
+            # 컬럼: sentence, speaker, emotion_score, emotion_text, registered_datetime
             result = []
             for row in rows:
-                sentence, speaker, emotion_score, emotion_text = row
+                sentence, speaker, emotion_score, emotion_text, registered_datetime = row
                 result.append({
                     "sentence": sentence,
                     "speaker": speaker,
                     "emotion_score": emotion_score,
                     "emotion_text": emotion_text,
+                    "registered_datetime": str(registered_datetime),
                 })
             return result
 
