@@ -99,8 +99,8 @@ def extract_voice_embedding(audio_path: str) -> np.ndarray:
     return embedding_np
 
 def cosine_similarity(vec1, vec2):
-    print("vec1:", vec1)
-    print("vec2:", vec2)
+    # print("vec1:", vec1)
+    # print("vec2:", vec2)
     if vec1 is None or vec2 is None:
         return -1.0
     v1 = np.array(vec1)
@@ -111,4 +111,24 @@ def cosine_similarity(vec1, vec2):
     norm2 = np.linalg.norm(v2)
     if norm1 == 0 or norm2 == 0:
         return -1.0
-    return float(np.dot(v1, v2) / (norm1 * norm2)) 
+    return float(np.dot(v1, v2) / (norm1 * norm2))
+
+def cut_wav_by_timestamps(wav_path, segments, output_dir):
+    """
+    wav_path: 원본 wav 파일 경로
+    segments: [(start, end), ...] 초 단위
+    output_dir: 저장할 폴더
+    return: 저장된 파일 경로 리스트
+    """
+    output_dir = get_storage_audio_path(output_dir) if not output_dir.startswith("storage/audio/") else output_dir
+    os.makedirs(output_dir, exist_ok=True)
+    saved_files = []
+    for i, (start, end) in enumerate(segments):
+        out_file = Path(output_dir) / f"{Path(wav_path).stem}_seg_{i}.wav"
+        subprocess.run([
+            "ffmpeg", "-y", "-i", wav_path,
+            "-ss", str(start), "-to", str(end),
+            "-c", "copy", str(out_file)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        saved_files.append(str(out_file))
+    return saved_files 

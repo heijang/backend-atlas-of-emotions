@@ -55,17 +55,80 @@ def test_login_user(user_id):
     finally:
         dao.close()
 
+def test_insert_conversation_master(user_id, topic=None):
+    dao = ReportDAO()
+    try:
+        master_id = dao.insert_conversation_master(user_id, topic)
+        print(f"Inserted master: id={master_id}")
+    except Exception as e:
+        print(f"Insert master failed: {e}")
+    finally:
+        dao.close()
+
+def test_insert_conversation_detail(master_id, sentence, speaker, emotion_score, emotion_text, audio_path=None):
+    dao = ReportDAO()
+    try:
+        detail_id = dao.insert_conversation_detail(master_id, sentence, speaker, emotion_score, emotion_text, audio_path)
+        print(f"Inserted detail: id={detail_id}")
+    except Exception as e:
+        print(f"Insert detail failed: {e}")
+    finally:
+        dao.close()
+
+def test_get_conversation_master_list(user_id):
+    dao = ReportDAO()
+    try:
+        data = dao.get_conversation_master_list(user_id)
+        from pprint import pprint
+        pprint(data)
+    except Exception as e:
+        print(f"쿼리 실패: {e}")
+    finally:
+        dao.close()
+
+def test_get_conversation_details(master_id):
+    dao = ReportDAO()
+    try:
+        data = dao.get_conversation_details(master_id)
+        from pprint import pprint
+        pprint(data)
+    except Exception as e:
+        print(f"쿼리 실패: {e}")
+    finally:
+        dao.close()
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise ValueError("인자가 맞지 않습니다.")
     cmd = sys.argv[1]
     if cmd == "connect":
         test_connect()
-    elif cmd == "get_user_conversations_with_emotions":
+    elif cmd == "get_conversation_master_list":
         if len(sys.argv) < 3:
             raise ValueError("인자가 맞지 않습니다.")
         user_id = sys.argv[2]
-        test_get_user_conversations_with_emotions(user_id)
+        test_get_conversation_master_list(user_id)
+    elif cmd == "get_conversation_details":
+        if len(sys.argv) < 3:
+            raise ValueError("인자가 맞지 않습니다.")
+        master_id = sys.argv[2]
+        test_get_conversation_details(master_id)
+    elif cmd == "insert_conversation_master":
+        if len(sys.argv) < 3:
+            raise ValueError("인자가 맞지 않습니다.")
+        user_id = sys.argv[2]
+        topic = sys.argv[3] if len(sys.argv) > 3 else None
+        test_insert_conversation_master(user_id, topic)
+    elif cmd == "insert_conversation_detail":
+        if len(sys.argv) < 7:
+            raise ValueError("인자가 맞지 않습니다.")
+        master_id = int(sys.argv[2])
+        sentence = sys.argv[3]
+        speaker = sys.argv[4]
+        emotion_score = sys.argv[5]
+        emotion_text = sys.argv[6]
+        audio_path = sys.argv[7] if len(sys.argv) > 7 else None
+        test_insert_conversation_detail(master_id, sentence, speaker, emotion_score, emotion_text, audio_path)
     elif cmd == "register_user":
         if len(sys.argv) < 4:
             raise ValueError("인자가 맞지 않습니다.")
