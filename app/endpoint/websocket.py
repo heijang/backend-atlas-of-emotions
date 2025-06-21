@@ -10,8 +10,8 @@ import json
 from app.voice_identifier import save_user_voice_embedding_to_db, load_user_voice_embedding_to_memory, compare_voice_with_memory, get_user_uid_by_user_id
 import librosa
 from app.emotion_analyzer import analyze_emotions
-from app.audio_utils import cut_wav_by_timestamps, get_storage_audio_path
-from app.persistence.report_dao import ReportDAO
+from app.util.audio_utils import cut_wav_by_timestamps, get_storage_audio_path
+from app.dao.report_dao import ReportDAO
 import time
 
 router = APIRouter()

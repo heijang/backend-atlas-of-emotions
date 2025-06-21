@@ -1,6 +1,6 @@
 import numpy as np
-from app.audio_utils import extract_voice_embedding, cosine_similarity
-from app.persistence.user_dao import UserDAO
+from app.util.audio_utils import extract_voice_embedding, cosine_similarity
+from app.dao.user_dao import UserDAO
 
 # Helper: user_id(str) -> user_uid(int)
 def get_user_uid_by_user_id(user_id: str) -> int:

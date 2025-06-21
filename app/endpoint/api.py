@@ -1,11 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, Response, Request, Form
 import os
 import json
-from app.audio_utils import extract_and_save_embedding, get_storage_audio_path
-from app.persistence.user_dao import UserDAO
+from app.util.audio_utils import extract_and_save_embedding, get_storage_audio_path
+from app.dao.user_dao import UserDAO
 from app.voice_identifier import save_user_voice_embedding_to_db, load_user_voice_embedding_to_memory
 from typing import Optional
-from app.websocket import user_voice_embeddings_mem
+from app.endpoint.websocket import user_voice_embeddings_mem
 
 router = APIRouter()
 

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from google.cloud import speech_v1p1beta1 as speech
-from app.audio_utils import get_storage_audio_path
+from app.util.audio_utils import get_storage_audio_path
 import tempfile
 import subprocess
 import wave
@@ -54,7 +54,7 @@ class GoogleSTTProvider:
         return google_stt_sync(audio_bytes)
 
 def get_clova_client():
-    from example.clova_speech_client import ClovaSpeechClient
+    from app.clova_speech_client import ClovaSpeechClient
     return ClovaSpeechClient()
 
 class ClovaSTTProvider:
