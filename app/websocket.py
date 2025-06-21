@@ -12,6 +12,7 @@ import librosa
 from app.emotion_analyzer import analyze_emotions
 from app.audio_utils import cut_wav_by_timestamps, get_storage_audio_path
 from app.persistence.report_dao import ReportDAO
+import time
 
 router = APIRouter()
 
@@ -200,7 +201,12 @@ async def websocket_endpoint(websocket: WebSocket):
             elif mode == "audio_data":
                 with open(wav_path, "rb") as f:
                     full_audio = f.read()
+                # Clova 분석 시간 측정
+                clova_start = time.time()
+                print(f"[Clova 분석] 요청 시작: {clova_start}")
                 final_result = get_sync_stt_provider().sync(full_audio)
+                clova_end = time.time()
+                print(f"[Clova 분석] 요청 종료: {clova_end}, 소요시간: {clova_end - clova_start:.2f}초")
                 if isinstance(final_result, list):
                     print("[최종 STT - Clova diarization 결과]")
                     # DB 저장 로직 추가
@@ -214,10 +220,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         print(f"[DB] user_conversation_master 저장: master_uid={master_uid}")
                     except Exception as e:
                         print(f"[DB] master 저장 에러: {e}")
-                    # 음성 임베딩 비교 로직 추가
-                    if not user_id:
-                        print(f"[디버그] audio_data 모드에서 user_id가 세션에 없음! test_user로 대체됨. sid={sid}")
-                        user_id = "test_user"  # 임시 테스트용
                     user_embedding = user_voice_embeddings_mem.get(user_id)
                     if user_embedding is None:
                         print(f"[음성 식별] user_id={user_id} 메모리 내 임베딩 정보 없음.")
@@ -226,8 +228,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         start = seg.get('start')
                         end = seg.get('end')
                         if start is not None and end is not None:
-                            start_sec = start / SAMPLE_RATE
-                            end_sec = end / SAMPLE_RATE
+                            # ms → 초 변환
+                            start_sec = start / 1000
+                            end_sec = end / 1000
                             segment_timestamps.append((start_sec, end_sec))
                     segment_dir = get_storage_audio_path(f"segments/{ts}_{sid}")
                     segment_files = cut_wav_by_timestamps(wav_path, segment_timestamps, segment_dir)
@@ -239,22 +242,54 @@ async def websocket_endpoint(websocket: WebSocket):
                             seg_wav_path = segment_files[i] if i < len(segment_files) else wav_path
                             is_same, similarity = compare_voice_with_memory(seg_wav_path, user_embedding, threshold=0.75)
                             print(f"[음성 식별] Segment {i+1} | 유사도: {similarity:.4f} | 동일인: {is_same} | 파일: {seg_wav_path}")
+                            # Gemini 감정분석 시간 측정
+                            gemini_start = time.time()
+                            print(f"[Gemini 분석] 요청 시작: {gemini_start}")
                             # DB에 detail 저장
                             if master_uid:
                                 try:
+                                    # emotion_result: 전체 감정분석 결과
+                                    # dominant_emotion: audio.scores에서 가장 높은 값의 key
+                                    emotion_result = seg.get('emotion_result')
+                                    if not emotion_result:
+                                        # backward compatibility: seg에 emotion_score만 있을 경우
+                                        emotion_result = {}
+                                    else:
+                                        # 이미 emotion_result가 dict로 들어온 경우 그대로 사용
+                                        pass
+                                    # dominant_emotion 추출
+                                    dominant_emotion = None
+                                    if emotion_result and 'audio' in emotion_result and 'scores' in emotion_result['audio']:
+                                        scores = emotion_result['audio']['scores']
+                                        if isinstance(scores, dict):
+                                            # 값이 str일 수도 있으니 float 변환
+                                            try:
+                                                dominant_emotion = max(scores, key=lambda k: float(scores[k]))
+                                            except Exception:
+                                                dominant_emotion = None
                                     report_dao.insert_conversation_detail(
                                         master_uid=master_uid,
                                         sentence=seg.get('text'),
                                         speaker=str(seg.get('speaker', {}).get('label')) if isinstance(seg.get('speaker'), dict) else str(seg.get('speaker')),
-                                        emotion_score=_json.dumps(seg.get('emotion_score', {}), ensure_ascii=False),
-                                        emotion_text=seg.get('emotion_text', None),
-                                        audio_path=seg_wav_path
+                                        emotion_result=_json.dumps(emotion_result, ensure_ascii=False),
+                                        dominant_emotion=dominant_emotion,
+                                        start_ms=seg.get('start'),
+                                        end_ms=seg.get('end')
                                     )
+                                    gemini_end = time.time()
+                                    print(f"[Gemini 분석] 요청 종료: {gemini_end}, 소요시간: {gemini_end - gemini_start:.2f}초")
                                     print(f"[DB] user_conversation_detail 저장: master_uid={master_uid}, seg_idx={i}")
                                 except Exception as e:
                                     print(f"[DB] detail 저장 에러: {e}")
                         except Exception as e:
                             print(f"[음성 식별] Segment {i+1} | 에러: {e}")
+                    if master_uid:
+                        try:
+                            report_dao.update_master_audio_path(master_uid, wav_path)
+                            print(f"[DB] user_conversation_master.audio_path 업데이트: master_uid={master_uid}")
+                        except Exception as e:
+                            print(f"[DB] master.audio_path 업데이트 에러: {e}")
+
                     try:
                         report_dao.close()
                     except Exception:

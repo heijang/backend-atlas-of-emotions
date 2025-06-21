@@ -8,7 +8,7 @@ class UserDAO(PostgresDAO):
         uid SERIAL PRIMARY KEY,
         user_id VARCHAR(64) UNIQUE,
         user_name VARCHAR(128),
-        registered_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     
     user_voice_embeddings 테이블 예시:
@@ -16,12 +16,12 @@ class UserDAO(PostgresDAO):
         uid SERIAL PRIMARY KEY,
         user_uid INTEGER UNIQUE,
         embedding BYTEA,
-        registered_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """
     def register_user(self, user_id: str, user_name: str):
         query = """
-            INSERT INTO users (user_id, user_name, registered_datetime)
+            INSERT INTO users (user_id, user_name, created_at)
             VALUES (%s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name
         """
@@ -29,26 +29,26 @@ class UserDAO(PostgresDAO):
 
     def get_user_by_id(self, user_id: str):
         query = """
-            SELECT uid, user_id, user_name, registered_datetime
+            SELECT uid, user_id, user_name, created_at
             FROM users
             WHERE user_id = %s
         """
         result = self.execute_query(query, (user_id,))
         if result:
-            uid, user_id, user_name, registered_datetime = result[0]
+            uid, user_id, user_name, created_at = result[0]
             return {
                 'uid': uid,
                 'user_id': user_id,
                 'user_name': user_name,
-                'registered_datetime': str(registered_datetime)
+                'created_at': str(created_at)
             }
         return None
 
     def save_user_voice_embedding(self, user_uid: int, embedding: np.ndarray):
         query = """
-            INSERT INTO user_voice_embeddings (user_uid, embedding, registered_datetime)
+            INSERT INTO user_voice_embeddings (user_uid, embedding, created_at)
             VALUES (%s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (user_uid) DO UPDATE SET embedding = EXCLUDED.embedding, registered_datetime = CURRENT_TIMESTAMP
+            ON CONFLICT (user_uid) DO UPDATE SET embedding = EXCLUDED.embedding, created_at = CURRENT_TIMESTAMP
         """
         embedding_bytes = embedding.tobytes()
         self.execute_query(query, (user_uid, embedding_bytes))
