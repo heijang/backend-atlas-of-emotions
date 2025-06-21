@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.endpoint.websocket import router as ws_router
-from app.endpoint.api import router as api_router
+from app.endpoints.api_user import router as api_user_router
+from app.endpoints.api_analyze import router as api_analyze_router
+from app.endpoints.api_report import router as api_report_router
+from app.endpoints.ws_user import router as ws_user_router
+from app.endpoints.ws_analyze import router as ws_analyze_router
+import uvicorn
 
 app = FastAPI()
 
@@ -14,8 +18,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ws_router)
-app.include_router(api_router)
+app.include_router(api_user_router)
+app.include_router(api_analyze_router)
+app.include_router(api_report_router)
+app.include_router(ws_user_router)
+app.include_router(ws_analyze_router)
+
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

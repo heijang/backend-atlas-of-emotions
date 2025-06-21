@@ -1,5 +1,5 @@
 import numpy as np
-from app.util.audio_utils import extract_voice_embedding, cosine_similarity
+from app.utils.audio_utils import extract_voice_embedding, cosine_similarity
 from app.dao.user_dao import UserDAO
 
 # Helper: user_id(str) -> user_uid(int)
