@@ -84,15 +84,39 @@ async def websocket_endpoint(websocket: WebSocket):
     # 개별 청크를 타임아웃과 함께 처리하는 비동기 함수
     async def process_chunk_with_timeout(chunk_id, chunk_data, user_id, user_embedding):
         try:
-            # 10초 타임아웃 설정
-            # `process_realtime_chunk`가 이제 비동기 함수이므로 직접 await 합니다.
-            analysis_result = await asyncio.wait_for(
-                analyze_service.process_realtime_chunk(chunk_data, user_id, user_embedding),
-                timeout=10.0
-            )
-            results[chunk_id] = analysis_result
+            async with asyncio.timeout(15.0): # 전체 파이프라인에 대한 타임아웃을 15초로 설정
+                # 1단계: STT와 오디오 처리를 동시에 실행
+                stt_task = asyncio.create_task(analyze_service.transcribe_chunk(chunk_data))
+                audio_task = asyncio.create_task(analyze_service._process_audio_for_analysis(chunk_data))
+
+                transcript = await stt_task
+                if not transcript:
+                    print(f"Chunk {chunk_id} STT 결과 없음. 처리 중단.")
+                    results[chunk_id] = None
+                    return
+
+                audio_array = await audio_task
+
+                # 2단계: Gemini 분석과 음성 비교를 동시에 실행
+                emotion_task = asyncio.create_task(analyze_service.analyze_emotion_from_audio_and_text(transcript, audio_array))
+                voice_task = asyncio.create_task(analyze_service.compare_voice_in_chunk(chunk_data, user_embedding))
+                
+                emotion_result = await emotion_task
+                is_same, similarity = await voice_task
+
+                # 3단계: 결과 조합
+                analysis_result = {
+                    "event": "emotion_analysis",
+                    "transcript": transcript,
+                    "emotion": emotion_result,
+                    "is_same": is_same,
+                    "similarity": similarity
+                }
+                results[chunk_id] = analysis_result
+                print(f"Chunk {chunk_id} 모든 처리 완료.")
+
         except asyncio.TimeoutError:
-            print(f"Chunk {chunk_id} 처리 시간 초과 (10초). 해당 요청을 버립니다.")
+            print(f"Chunk {chunk_id} 처리 시간 초과 (15초). 해당 요청을 버립니다.")
             results[chunk_id] = None # 타임아웃된 작업 표시
         except Exception as e:
             print(f"Chunk {chunk_id} 처리 중 에러: {e}")

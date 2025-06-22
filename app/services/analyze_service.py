@@ -49,63 +49,55 @@ class AnalyzeService:
         
         return {"event": "send_conversation", "status": "ok"}, user_id
 
-    async def process_realtime_chunk(self, chunk_bytes: bytes, user_id: str, user_embedding: list) -> dict | None:
+    # 1. STT 처리 (I/O Bound)
+    async def transcribe_chunk(self, chunk_bytes: bytes) -> str | None:
+        print(f"[실시간 처리] STT 요청 시작")
         start_time = time.time()
-        print(f"[실시간 처리 시작]")
-
-        stt_start_time = time.time()
+        # I/O 작업인 STT 요청을 별도 스레드에서 실행
         transcript = await asyncio.to_thread(get_streaming_stt_provider().streaming, chunk_bytes)
-        stt_end_time = time.time()
-        print(f"[실시간 처리] STT 소요 시간: {stt_end_time - stt_start_time:.4f}초")
+        end_time = time.time()
+        print(f"[실시간 처리] STT 소요 시간: {end_time - start_time:.4f}초. 결과: {transcript}")
+        return transcript
 
-        if not transcript:
-            return None
-
-        librosa_start_time = time.time()
-        
-        # CPU 집약적인 작업을 별도 함수로 분리
+    # 2. 오디오 처리 (CPU Bound)
+    async def _process_audio_for_analysis(self, chunk_bytes: bytes):
+        print(f"[실시간 처리] 오디오 처리 시작")
+        start_time = time.time()
         def _process_audio_with_librosa(data):
-            # Raw PCM 데이터를 in-memory WAV 파일로 변환합니다.
             with io.BytesIO() as wav_io:
                 with wave.open(wav_io, 'wb') as wf:
                     wf.setnchannels(1)
-                    wf.setsampwidth(2)      # 16-bit
-                    wf.setframerate(16000)  # 16kHz
+                    wf.setsampwidth(2)
+                    wf.setframerate(16000)
                     wf.writeframes(data)
                 wav_io.seek(0)
-                # 이제 librosa는 헤더가 있는 WAV 데이터를 처리할 수 있습니다.
                 return librosa.load(wav_io, sr=16000, mono=True)
-
+        
+        # CPU 집약적인 작업을 별도 스레드에서 실행
         audio_array, _ = await asyncio.to_thread(_process_audio_with_librosa, chunk_bytes)
-        
-        librosa_end_time = time.time()
-        print(f"[실시간 처리] Librosa 오디오 처리 소요 시간: {librosa_end_time - librosa_start_time:.4f}초")
-        
-        gemini_start_time = time.time()
-        emotion_result = await asyncio.to_thread(analyze_emotions, transcript, audio_array)
-        gemini_end_time = time.time()
-        print(f"[실시간 처리] Gemini 감정 분석 소요 시간: {gemini_end_time - gemini_start_time:.4f}초")
-
-        voice_comp_start_time = time.time()
-        is_same, similarity = await asyncio.to_thread(self._compare_voice_in_memory, chunk_bytes, user_embedding)
-        voice_comp_end_time = time.time()
-        print(f"[실시간 처리] 음성 유사도 분석 소요 시간: {voice_comp_end_time - voice_comp_start_time:.4f}초")
-
-
-        print(f"[실시간 STT] {transcript}")
-        print(f"[실시간 감정분석 결과] {json.dumps(emotion_result, ensure_ascii=False)}")
-        print(f"[실시간 음성 유사도] similarity={similarity}, is_same={is_same}")
-        
         end_time = time.time()
-        print(f"[실시간 처리 완료] 총 소요 시간: {end_time - start_time:.4f}초")
+        print(f"[실시간 처리] 오디오 처리 소요 시간: {end_time - start_time:.4f}초")
+        return audio_array
 
-        return {
-            "event": "emotion_analysis",
-            "transcript": transcript,
-            "emotion": emotion_result,
-            "is_same": is_same,
-            "similarity": similarity
-        }
+    # 3. 감정 분석 (I/O Bound)
+    async def analyze_emotion_from_audio_and_text(self, transcript: str, audio_array) -> dict | None:
+        print(f"[실시간 처리] Gemini 요청 시작")
+        start_time = time.time()
+        # I/O 작업인 Gemini API 요청을 별도 스레드에서 실행
+        emotion_result = await asyncio.to_thread(analyze_emotions, transcript, audio_array)
+        end_time = time.time()
+        print(f"[실시간 처리] Gemini 감정 분석 소요 시간: {end_time - start_time:.4f}초")
+        return emotion_result
+
+    # 4. 음성 비교 (CPU/File I/O Bound)
+    async def compare_voice_in_chunk(self, chunk_bytes: bytes, user_embedding: list) -> tuple[bool | None, float | None]:
+        print(f"[실시간 처리] 음성 비교 시작")
+        start_time = time.time()
+        # 파일 I/O와 계산이 섞여 있으므로 스레드에서 실행
+        is_same, similarity = await asyncio.to_thread(self._compare_voice_in_memory, chunk_bytes, user_embedding)
+        end_time = time.time()
+        print(f"[실시간 처리] 음성 유사도 분석 소요 시간: {end_time - start_time:.4f}초")
+        return is_same, similarity
 
     def _compare_voice_in_memory(self, chunk_bytes: bytes, user_embedding: list) -> tuple[bool | None, float | None]:
         if user_embedding is None:

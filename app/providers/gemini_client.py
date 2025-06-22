@@ -94,12 +94,21 @@ def map_emotion_to_color(emotion: str) -> str:
     return EMOTION_COLORS.get(emotion, "#F5F5F5")
 
 # 텍스트 감정 분석 함수
-def analyze_text_sentiment(text):
+def analyze_text_sentiment(text, context=""):
     if not model:
         print("Model not initialized, returning default sentiment")
         return {"positive": 0.33, "negative": 0.33, "neutral": 0.34}
     try:
-        prompt = f"""Analyze the sentiment of this text: \"{text}\"\nReturn only a JSON object with this exact format:\n{{\"positive\": number between 0 and 1, \"negative\": number between 0 and 1, \"neutral\": number between 0 and 1}}\nThe sum of all numbers should be 1."""
+        prompt = f"""
+        Given the following conversation context:
+        --- CONTEXT ---
+        {context if context else "No previous context."}
+        --- END CONTEXT ---
+
+        Analyze the sentiment of THIS specific text: \"{text}\"
+        Return only a JSON object with this exact format:
+        {{\"positive\": number between 0 and 1, \"negative\": number between 0 and 1, \"neutral\": number between 0 and 1}}
+        The sum of all numbers should be 1."""
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         if response_text.startswith("```") and response_text.endswith("```"):
@@ -161,103 +170,69 @@ def analyze_audio_emotion(audio_array):
 
 def analyze_conversation_emotions(segments: list) -> list:
     """
-    (신규) 전체 대화 세그먼트 리스트를 받아, 각 세그먼트의 텍스트와 음성을 종합적으로 분석합니다.
-    하나의 프롬프트로 전체 대화의 맥락을 제공하여 Gemini가 더 정확하게 감정을 분석하도록 합니다.
+    (수정) 전체 대화 세그먼트 리스트를 받아, 각 세그먼트를 개별적으로 분석하되,
+    이전 대화 내용을 컨텍스트로 함께 제공하여 분석 정확도를 높입니다.
+    안정성을 위해 임시 파일을 생성하는 대신 메모리 내에서 오디오를 처리합니다.
 
-    :param segments: [{'text': str, 'speaker': str, 'audio': np.ndarray}, ...]
-    :return: 각 세그먼트에 대한 감정 분석 결과 dict의 리스트. analyze_emotions와 동일한 포맷.
+    :param segments: [{'text': str, 'speaker': str, 'audio': np.ndarray | None}, ...]
+    :return: 각 세그먼트에 대한 감정 분석 결과 dict의 리스트.
     """
     if not model or not segments:
-        # 모델이 없거나 세그먼트가 없으면 개별 분석으로 폴백
-        return [analyze_emotions(seg.get('text', ''), seg.get('audio')) for seg in segments]
+        return []
 
-    temp_files_to_clean = []
-    try:
-        prompt_parts = [
-            "You are an expert conversation analyst. Below is a transcript of a conversation with multiple speakers, including the audio for each segment. Your task is to analyze the emotion for EACH segment based on both the text and the audio, considering the overall context of the conversation.",
-            "Analyze each segment and provide a response in a single JSON array format. Each object in the array should correspond to a segment and have the following structure:",
-            '{"text_analysis": {"positive": float, "negative": float, "neutral": float}, "audio_analysis": {"happy": float, "sad": float, "angry": float, "fear": float, "disgust": float, "surprise": float, "neutral": float}}',
-            "Ensure the sum of scores in each dictionary is 1.0. Here is the conversation data:"
-        ]
+    all_results = []
+    conversation_history = []
 
-        for i, seg in enumerate(segments):
+    print(f"[Gemini 대화 분석] {len(segments)}개 세그먼트 순차 분석 시작...")
+    for i, seg in enumerate(segments):
+        try:
             text = seg.get('text', '')
             speaker = seg.get('speaker', 'Unknown')
             audio_array = seg.get('audio')
 
-            prompt_parts.append(f"\n--- Segment {i+1} ---\nSpeaker: {speaker}\nText: \"{text}\"")
+            # 이전 대화 내용을 컨텍스트로 구성
+            context = "\n".join(conversation_history[-3:]) # 최근 3개 대화만 컨텍스트로 사용
             
-            if audio_array is not None and audio_array.size > 0:
-                temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                temp_files_to_clean.append(temp_wav.name)
-                with wave.open(temp_wav.name, "wb") as wav_file:
-                    wav_file.setnchannels(1)
-                    wav_file.setsampwidth(2)
-                    wav_file.setframerate(16000)
-                    wav_data = (audio_array * 32767).astype(np.int16)
-                    wav_file.writeframes(wav_data.tobytes())
-                audio_file = genai.upload_file(path=temp_wav.name)
-                prompt_parts.append(audio_file)
+            # 단일 분석 함수 재활용
+            # analyze_emotions는 내부적으로 텍스트와 오디오 분석을 각각 수행
+            analysis_result = analyze_emotions(text, audio_array, context)
+            all_results.append(analysis_result)
 
-        print(f"[Gemini 대화 분석] {len(segments)}개 세그먼트 분석 요청 시작...")
-        response = model.generate_content(prompt_parts, generation_config={"response_mime_type": "application/json"})
-        
-        analysis_results = json.loads(response.text)
-        
-        processed_results = []
-        for res in analysis_results:
-            text_scores = res.get("text_analysis", {"neutral": 1.0})
-            audio_scores = res.get("audio_analysis", {"neutral": 1.0})
-            
-            text_dominant = get_dominant_emotion(text_scores)
-            audio_dominant = get_dominant_emotion(audio_scores)
+            # 현재 대화를 기록에 추가
+            conversation_history.append(f"Speaker {speaker}: {text}")
+            print(f"  - Segment {i+1}/{len(segments)} 분석 완료.")
 
-            # analyze_emotions와 동일한 포맷으로 결과 구성
-            processed_results.append({
-                "text": {
-                    "scores": text_scores, "dominant": text_dominant,
-                    "standard": map_emotion_to_standard(text_dominant),
-                    "korean": map_emotion_to_korean(text_dominant),
-                    "color": map_emotion_to_color(map_emotion_to_standard(text_dominant)),
-                },
-                "audio": {
-                    "scores": audio_scores, "dominant": audio_dominant,
-                    "standard": map_emotion_to_standard(audio_dominant),
-                    "korean": map_emotion_to_korean(audio_dominant),
-                    "color": map_emotion_to_color(map_emotion_to_standard(audio_dominant)),
-                },
-            })
-        print(f"[Gemini 대화 분석] 분석 완료.")
-        return processed_results
+        except Exception as e:
+            print(f"  - Segment {i+1} 분석 중 오류 발생: {e}")
+            # 오류 발생 시 기본값으로 결과 추가
+            all_results.append(_format_analysis_result(
+                {"neutral": 1.0}, {"neutral": 1.0}
+            ))
+            continue
+    
+    print(f"[Gemini 대화 분석] 모든 세그먼트 분석 완료.")
+    return all_results
 
-    except Exception as e:
-        print(f"Error in Gemini conversation analysis: {e}")
-        return [analyze_emotions(seg.get('text', ''), seg.get('audio')) for seg in segments]
-    finally:
-        # 모든 임시 오디오 파일 정리
-        for f in temp_files_to_clean:
-            if os.path.exists(f):
-                try:
-                    os.unlink(f)
-                except OSError as e:
-                    print(f"Error removing temp file {f}: {e}")
-
-def analyze_emotions(text, audio_array):
+def analyze_emotions(text, audio_array, context=""):
     """
-    단일 텍스트와 오디오를 입력받아 Gemini로 감정 분석을 수행합니다.
-    (기존 함수는 이제 내부 헬퍼 함수들을 호출하는 래퍼 역할을 합니다)
+    (수정) 단일 텍스트와 오디오를 입력받아 Gemini로 감정 분석을 수행합니다.
+    대화의 이전 맥락(context)을 프롬프트에 추가할 수 있습니다.
     """
-    text_scores = analyze_text_sentiment(text)
-    audio_scores = analyze_audio_emotion(audio_array)
+    # 텍스트와 오디오 분석을 병렬로 실행
+    text_scores = analyze_text_sentiment(text, context)
+    
+    # audio_array가 None이거나 비어있으면 오디오 분석 스킵
+    if audio_array is not None and audio_array.size > 0:
+        audio_scores = analyze_audio_emotion(audio_array)
+    else:
+        audio_scores = {"neutral": 1.0}
+
     return _format_analysis_result(text_scores, audio_scores)
 
 def _format_analysis_result(text_scores, audio_scores):
-    """
-    텍스트 및 오디오 감정 분석 점수를 받아 최종 결과 dict 포맷으로 만듭니다.
-    """
+    """분석 결과를 최종 포맷으로 조합하는 헬퍼 함수"""
     text_dominant = get_dominant_emotion(text_scores)
     audio_dominant = get_dominant_emotion(audio_scores)
-    
     return {
         "text": {
             "scores": text_scores,
