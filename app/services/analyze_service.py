@@ -1,4 +1,5 @@
 # Standard library imports
+import asyncio
 import io
 import json
 import os
@@ -48,27 +49,56 @@ class AnalyzeService:
         
         return {"event": "send_conversation", "status": "ok"}, user_id
 
-    def process_realtime_chunk(self, chunk_bytes: bytes, user_id: str, user_embedding: list) -> dict | None:
-        transcript = get_streaming_stt_provider().streaming(chunk_bytes)
+    async def process_realtime_chunk(self, chunk_bytes: bytes, user_id: str, user_embedding: list) -> dict | None:
+        start_time = time.time()
+        print(f"[실시간 처리 시작]")
+
+        stt_start_time = time.time()
+        transcript = await asyncio.to_thread(get_streaming_stt_provider().streaming, chunk_bytes)
+        stt_end_time = time.time()
+        print(f"[실시간 처리] STT 소요 시간: {stt_end_time - stt_start_time:.4f}초")
+
         if not transcript:
             return None
 
-        with io.BytesIO() as wav_io:
-            with wave.open(wav_io, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(16000)
-                wf.writeframes(chunk_bytes)
-            wav_io.seek(0)
-            audio_array, _ = librosa.load(wav_io, sr=16000, mono=True)
+        librosa_start_time = time.time()
         
-        emotion_result = analyze_emotions(transcript, audio_array)
-        is_same, similarity = self._compare_voice_in_memory(chunk_bytes, user_embedding)
+        # CPU 집약적인 작업을 별도 함수로 분리
+        def _process_audio_with_librosa(data):
+            # Raw PCM 데이터를 in-memory WAV 파일로 변환합니다.
+            with io.BytesIO() as wav_io:
+                with wave.open(wav_io, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)      # 16-bit
+                    wf.setframerate(16000)  # 16kHz
+                    wf.writeframes(data)
+                wav_io.seek(0)
+                # 이제 librosa는 헤더가 있는 WAV 데이터를 처리할 수 있습니다.
+                return librosa.load(wav_io, sr=16000, mono=True)
+
+        audio_array, _ = await asyncio.to_thread(_process_audio_with_librosa, chunk_bytes)
+        
+        librosa_end_time = time.time()
+        print(f"[실시간 처리] Librosa 오디오 처리 소요 시간: {librosa_end_time - librosa_start_time:.4f}초")
+        
+        gemini_start_time = time.time()
+        emotion_result = await asyncio.to_thread(analyze_emotions, transcript, audio_array)
+        gemini_end_time = time.time()
+        print(f"[실시간 처리] Gemini 감정 분석 소요 시간: {gemini_end_time - gemini_start_time:.4f}초")
+
+        voice_comp_start_time = time.time()
+        is_same, similarity = await asyncio.to_thread(self._compare_voice_in_memory, chunk_bytes, user_embedding)
+        voice_comp_end_time = time.time()
+        print(f"[실시간 처리] 음성 유사도 분석 소요 시간: {voice_comp_end_time - voice_comp_start_time:.4f}초")
+
 
         print(f"[실시간 STT] {transcript}")
         print(f"[실시간 감정분석 결과] {json.dumps(emotion_result, ensure_ascii=False)}")
         print(f"[실시간 음성 유사도] similarity={similarity}, is_same={is_same}")
         
+        end_time = time.time()
+        print(f"[실시간 처리 완료] 총 소요 시간: {end_time - start_time:.4f}초")
+
         return {
             "event": "emotion_analysis",
             "transcript": transcript,
