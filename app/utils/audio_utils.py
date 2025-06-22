@@ -1,106 +1,78 @@
-import os
-import subprocess
 from pathlib import Path
-from speechbrain.pretrained import EncoderClassifier
+import subprocess
+import wave
 import numpy as np
 
-_classifier = None
-def get_classifier():
-    global _classifier
-    if _classifier is None:
-        _classifier = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb")
-    return _classifier
 
-def parse_silence_log(ffmpeg_output: str):
-    import re
-    starts = []
-    ends = []
-    for line in ffmpeg_output.splitlines():
-        if "silence_start" in line:
-            match = re.search(r"silence_start: (\d+\.?\d*)", line)
-            if match:
-                starts.append(float(match.group(1)))
-        elif "silence_end" in line:
-            match = re.search(r"silence_end: (\d+\.?\d*)", line)
-            if match:
-                ends.append(float(match.group(1)))
-    return list(zip(ends[:-1], starts[1:]))  # (start, end) for segments between silences
+def cut_wav_by_timestamps(input_wav: str, timestamps: list[tuple[float, float]], output_dir: str) -> list[str]:
+    """WAV 파일을 주어진 타임스탬프 목록에 따라 여러 세그먼트로 잘라 저장합니다.
 
-def get_storage_audio_path(*paths):
-    base = os.path.join("storage", "audio")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, *paths)
+    Args:
+        input_wav (str): 원본 WAV 파일 경로.
+        timestamps (list[tuple[float, float]]): 자르기 위한 (시작 시간, 종료 시간) 튜플의 리스트.
+        output_dir (str): 잘린 WAV 세그먼트를 저장할 디렉토리 경로.
 
-def convert_webm_to_wav(webm_path, wav_path):
-    wav_path = get_storage_audio_path(wav_path) if not wav_path.startswith("storage/audio/") else wav_path
-    subprocess.run([
-        "ffmpeg", "-y", "-i", webm_path,
-        "-ar", "16000", "-ac", "1", wav_path
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-def split_wav_by_silence(wav_path, output_dir, silence_threshold="-35dB", silence_duration=0.7):
-    output_dir = get_storage_audio_path(output_dir) if not output_dir.startswith("storage/audio/") else output_dir
-    result = subprocess.run([
-        "ffmpeg", "-i", wav_path,
-        "-af", f"silencedetect=noise={silence_threshold}:d={silence_duration}",
-        "-f", "null", "-"
-    ], stderr=subprocess.PIPE, text=True)
-
-    segments = parse_silence_log(result.stderr)
-    if not segments:
-        return []
-
-    saved_files = []
-    for i, (start, end) in enumerate(segments):
-        out_file = Path(output_dir) / f"{Path(wav_path).stem}_seg_{i}.wav"
-        subprocess.run([
-            "ffmpeg", "-y", "-i", wav_path,
-            "-ss", str(start), "-to", str(end),
-            "-c", "copy", str(out_file)
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        saved_files.append(str(out_file))
-
-    return saved_files
-
-def extract_and_save_embedding(audio_path: str) -> str:
+    Returns:
+        list[str]: 저장된 각 세그먼트 파일의 경로 리스트.
     """
-    Extracts embedding from audio using speechbrain and saves it to a file.
-    Returns the path to the saved embedding file.
-    """
-    classifier = get_classifier()
-    signal = classifier.load_audio(audio_path)
-    embedding = classifier.encode_batch(signal)
-    embedding_np = embedding.squeeze().cpu().numpy()
-
-    embedding_dir = get_storage_audio_path("embeddings")
-    os.makedirs(embedding_dir, exist_ok=True)
-    base = os.path.splitext(os.path.basename(audio_path))[0]
-    embedding_path = os.path.join(embedding_dir, f"{base}_embedding.npy")
-    np.save(embedding_path, embedding_np)
-    return embedding_path
-
-def extract_voice_embedding(audio_path: str) -> np.ndarray:
-    """
-    Extracts a voice embedding from an audio file using speechbrain.
-    Returns the embedding as a numpy array.
-    """
-    classifier = get_classifier()
-    signal = classifier.load_audio(audio_path)
-    # signal: torch.Tensor, shape: (1, N) or (N,)
+    if not Path(output_dir).exists():
+        Path(output_dir).mkdir(parents=True)
+    
+    segment_files = []
     try:
-        import soundfile as sf
-        info = sf.info(audio_path)
-        print(f"[임베딩 추출] audio_path={audio_path} | samplerate={info.samplerate} | channels={info.channels} | format={info.format} | subtype={info.subtype}")
+        with wave.open(input_wav, 'rb') as wf:
+            framerate = wf.getframerate()
+            sampwidth = wf.getsampwidth()
+            nchannels = wf.getnchannels()
+            
+            for i, (start_sec, end_sec) in enumerate(timestamps):
+                output_wav = Path(output_dir) / f"segment_{i+1}.wav"
+                
+                start_frame = int(start_sec * framerate)
+                end_frame = int(end_sec * framerate)
+                
+                wf.setpos(start_frame)
+                frames = wf.readframes(end_frame - start_frame)
+                
+                with wave.open(str(output_wav), 'wb') as out_f:
+                    out_f.setnchannels(nchannels)
+                    out_f.setsampwidth(sampwidth)
+                    out_f.setframerate(framerate)
+                    out_f.writeframes(frames)
+                segment_files.append(str(output_wav))
     except Exception as e:
-        print(f"[임베딩 추출] audio_path={audio_path} | 파일 정보 확인 실패: {e}")
-    print(f"[임베딩 추출] signal.shape={getattr(signal, 'shape', None)}, signal.dtype={getattr(signal, 'dtype', None)}")
-    embedding = classifier.encode_batch(signal)
-    embedding_np = embedding.squeeze().cpu().numpy().astype(np.float32)
-    return embedding_np
+        print(f"오디오 컷팅 중 에러: {e}")
+        return []
+    return segment_files
 
-def cosine_similarity(vec1, vec2):
-    # print("vec1:", vec1)
-    # print("vec2:", vec2)
+
+def get_storage_audio_path(subpath: str = "") -> str:
+    """storage/audio를 기준으로 하위 경로를 생성하고, 전체 절대 경로를 반환합니다.
+
+    Args:
+        subpath (str, optional): storage/audio 아래에 추가할 하위 경로. Defaults to "".
+
+    Returns:
+        str: 생성된 디렉토리의 전체 경로.
+    """
+    base_dir = Path(__file__).parent.parent.parent / "storage" / "audio"
+    target_path = base_dir / subpath
+    # exist_ok=True: 해당 경로가 존재하더라도 에러 발생 X
+    target_path.mkdir(parents=True, exist_ok=True)
+    return str(target_path)
+
+
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    """두 개의 numpy 벡터 간의 코사인 유사도를 계산합니다.
+
+    Args:
+        vec1 (np.ndarray): 첫 번째 벡터.
+        vec2 (np.ndarray): 두 번째 벡터.
+
+    Returns:
+        float: 두 벡터 간의 코사인 유사도 값 (-1.0 ~ 1.0).
+               벡터가 유효하지 않거나 정규화할 수 없는 경우 -1.0을 반환합니다.
+    """
     if vec1 is None or vec2 is None:
         return -1.0
     v1 = np.array(vec1)
@@ -111,24 +83,4 @@ def cosine_similarity(vec1, vec2):
     norm2 = np.linalg.norm(v2)
     if norm1 == 0 or norm2 == 0:
         return -1.0
-    return float(np.dot(v1, v2) / (norm1 * norm2))
-
-def cut_wav_by_timestamps(wav_path, segments, output_dir):
-    """
-    wav_path: 원본 wav 파일 경로
-    segments: [(start, end), ...] 초 단위
-    output_dir: 저장할 폴더
-    return: 저장된 파일 경로 리스트
-    """
-    output_dir = get_storage_audio_path(output_dir) if not output_dir.startswith("storage/audio/") else output_dir
-    os.makedirs(output_dir, exist_ok=True)
-    saved_files = []
-    for i, (start, end) in enumerate(segments):
-        out_file = Path(output_dir) / f"{Path(wav_path).stem}_seg_{i}.wav"
-        subprocess.run([
-            "ffmpeg", "-y", "-i", wav_path,
-            "-ss", str(start), "-to", str(end),
-            "-c", "copy", str(out_file)
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        saved_files.append(str(out_file))
-    return saved_files 
+    return float(np.dot(v1, v2) / (norm1 * norm2)) 

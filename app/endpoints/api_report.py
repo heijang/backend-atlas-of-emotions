@@ -1,11 +1,21 @@
-import json
-
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
+from app.services.report_services import report_service
 
 router = APIRouter()
 
-@router.get('/api/v1/report/{conversation_uid}')
-def get_report(conversation_uid: int):
-    # 예시 데이터
-    data = {"conversation_uid": conversation_uid, "report": "감정 분석 결과"}
-    return Response(content=json.dumps(data, ensure_ascii=False), media_type='application/json')
+@router.get("/api/v1/reports", tags=["Report"])
+def get_report_list(user_uid: int = Query(...)):
+    try:
+        reports = report_service.get_report_list(user_uid)
+        return JSONResponse(content={"success": True, "data": reports})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+
+@router.get("/api/v1/reports/{master_uid}", tags=["Report"])
+def get_report_details(master_uid: int):
+    try:
+        details = report_service.get_report_details(master_uid)
+        return JSONResponse(content={"success": True, "data": details})
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)

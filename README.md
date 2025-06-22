@@ -53,16 +53,16 @@ python -m app.persistence.dao_test
 ### 감정분석 테스트 실행
 
 - 오디오 파일과 텍스트를 입력해 Gemini 기반 감정분석 결과를 콘솔로 확인할 수 있습니다.
-- 예시 스크립트: `app/emotion_analyzer_test.py`
+- 예시 스크립트: `test/gemini_client_test.py`
 - 실행 방법 (최상위 폴더에서):
 
 ```
-python -m app.emotion_analyzer_test
+python -m test.gemini_client_test
 ```
 
 - 또는 아래와 같이 실행해도 됩니다:
 ```
-PYTHONPATH=. python app/emotion_analyzer_test.py
+PYTHONPATH=. python test/gemini_client_test.py
 ```
 
 - 결과는 텍스트/음성 각각의 감정 점수, 우세 감정, 표준 감정, 한글, 색상 정보가 dict로 출력됩니다.

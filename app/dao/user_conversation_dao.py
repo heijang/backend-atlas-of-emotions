@@ -1,13 +1,12 @@
 from .dao import PostgresDAO
 
-class ReportDAO(PostgresDAO):
+class UserConversationDAO(PostgresDAO):
     """
     대화 마스터 테이블 (user_conversation_master):
     CREATE TABLE user_conversation_master (
         uid SERIAL PRIMARY KEY,
         user_uid INTEGER,
-        topic VARCHAR(256),
-        audio_path VARCHAR(512),
+        topic VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -24,11 +23,11 @@ class ReportDAO(PostgresDAO):
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """
-    def insert_conversation_master(self, user_uid, topic=None):
+    def insert_conversation_master(self, user_uid: int, topic: str = None):
         conn = self.get_connection()
         query = """
-            INSERT INTO user_conversation_master (user_uid, topic)
-            VALUES (%s, %s)
+            INSERT INTO user_conversation_master (user_uid, topic, created_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
             RETURNING uid
         """
         with conn.cursor() as cur:
@@ -113,8 +112,33 @@ class ReportDAO(PostgresDAO):
                 })
             return result
 
+    def get_conversation_list_by_user_uid(self, user_uid: int):
+        query = "SELECT uid, topic, created_at FROM user_conversation_master WHERE user_uid = %s ORDER BY created_at DESC"
+        results = self.execute_query(query, (user_uid,), fetch_mode="fetchall")
+        return [
+            {"uid": r[0], "topic": r[1], "created_at": str(r[2])} for r in results
+        ]
+
+    def get_conversation_details_by_master_uid(self, master_uid: int):
+        query = "SELECT speaker_name, is_user, text, start_time, end_time, emotion_result, dominant_emotion, audio_path, created_at FROM user_conversation_detail WHERE master_uid = %s ORDER BY start_time"
+        results = self.execute_query(query, (master_uid,), fetch_mode="fetchall")
+        return [
+            {
+                "speaker_name": r[0],
+                "is_user": r[1],
+                "text": r[2],
+                "start_time": r[3],
+                "end_time": r[4],
+                "emotion_result": r[5],
+                "dominant_emotion": r[6],
+                "audio_path": r[7],
+                "created_at": str(r[8]),
+            }
+            for r in results
+        ]
+
 if __name__ == "__main__":
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         user_uid = input("userUid 입력: ")
         data = dao.get_conversation_master_list(user_uid)

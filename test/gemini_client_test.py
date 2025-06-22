@@ -1,6 +1,8 @@
+import sys
+from app.providers.gemini_client import analyze_emotions
 import numpy as np
 import librosa
-from app.emotion_analyzer import analyze_emotions
+import os
 
 # 테스트용 파일 경로
 audio_path = "storage/audio/wav_chunks/session_20250616_163640_382207_4360721872.wav"
