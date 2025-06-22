@@ -8,11 +8,18 @@ DAO 테스트 스크립트 사용법
     python -m app.persistence.dao_test get_user_conversations_with_emotions "1"
 """
 import sys
-from ...app.persistence.report_dao import ReportDAO
-from ...app.persistence.user_dao import UserDAO
+import os
+from pprint import pprint
+
+# 테스트 스크립트에서 app 모듈을 찾을 수 있도록 프로젝트 루트를 path에 추가
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.insert(0, project_root)
+
+from app.dao.user_conversation_dao import UserConversationDAO
+from app.dao.user_dao import UserDAO
 
 def test_connect():
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         dao.connect()
         print("DB 연결 성공!")
@@ -20,18 +27,6 @@ def test_connect():
         print(f"DB 연결 실패: {e}")
     finally:
         dao.close()
-
-# get_user_conversations_with_emotions 함수는 report_dao.py에서 제거되었으므로 주석 처리
-# def test_get_user_conversations_with_emotions(user_id):
-#     dao = ReportDAO()
-#     try:
-#         data = dao.get_user_conversations_with_emotions(user_id)
-#         from pprint import pprint
-#         pprint(data)
-#     except Exception as e:
-#         print(f"쿼리 실패: {e}")
-#     finally:
-#         dao.close()
 
 def test_register_user(user_id, user_name):
     dao = UserDAO()
@@ -57,7 +52,7 @@ def test_login_user(user_id):
         dao.close()
 
 def test_insert_conversation_master(user_id, topic=None):
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         master_id = dao.insert_conversation_master(user_id, topic)
         print(f"Inserted master: id={master_id}")
@@ -67,7 +62,7 @@ def test_insert_conversation_master(user_id, topic=None):
         dao.close()
 
 def test_update_master_audio_path(master_id, audio_path):
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         dao.update_master_audio_path(master_id, audio_path)
         print(f"Updated master audio path: master_id={master_id}, audio_path={audio_path}")
@@ -77,7 +72,7 @@ def test_update_master_audio_path(master_id, audio_path):
         dao.close()
 
 def test_insert_conversation_detail(master_id, sentence, speaker, emotion_result, dominant_emotion, start_ms, end_ms):
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         detail_id = dao.insert_conversation_detail(master_id, sentence, speaker, emotion_result, dominant_emotion, start_ms, end_ms)
         print(f"Inserted detail: id={detail_id}")
@@ -87,10 +82,9 @@ def test_insert_conversation_detail(master_id, sentence, speaker, emotion_result
         dao.close()
 
 def test_get_conversation_master_list(user_id):
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         data = dao.get_conversation_master_list(user_id)
-        from pprint import pprint
         pprint(data)
     except Exception as e:
         print(f"쿼리 실패: {e}")
@@ -98,10 +92,9 @@ def test_get_conversation_master_list(user_id):
         dao.close()
 
 def test_get_conversation_details(master_id):
-    dao = ReportDAO()
+    dao = UserConversationDAO()
     try:
         data = dao.get_conversation_details(master_id)
-        from pprint import pprint
         pprint(data)
     except Exception as e:
         print(f"쿼리 실패: {e}")
@@ -114,11 +107,6 @@ if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "connect":
         test_connect()
-    # elif cmd == "get_user_conversations_with_emotions": # report_dao.py에서 제거되었으므로 주석 처리
-    #     if len(sys.argv) < 3:
-    #         raise ValueError("인자가 맞지 않습니다.")
-    #     user_id = sys.argv[2]
-    #     test_get_user_conversations_with_emotions(user_id)
     elif cmd == "get_conversation_master_list":
         if len(sys.argv) < 3:
             raise ValueError("인자가 맞지 않습니다.")
