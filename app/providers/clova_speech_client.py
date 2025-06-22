@@ -12,21 +12,29 @@ load_dotenv(dotenv_path=env_path)
 
 class ClovaSpeechClient:
     """
-    Naver Clova Speech API client using the multipart/form-data upload method.
-    This implementation is based on the user-provided code.
+    Naver Clova Speech API client for both long and short speech recognition.
     """
 
     def __init__(self):
-        self.invoke_url = os.getenv("CLOVA_INVOKE_URL")
-        self.secret = os.getenv("CLOVA_SECRET_KEY")
-        if not self.invoke_url or not self.secret:
+        # Long-form API credentials
+        self.long_invoke_url = os.getenv("CLOVA_SPEECH_LONG_INVOKE_URL")
+        self.long_secret = os.getenv("CLOVA_SPEECH_LONG_SECRET_KEY")
+        if not self.long_invoke_url or not self.long_secret:
             raise ValueError(
-                "Clova INVOKE_URL or SECRET_KEY is not configured in environment variables."
+                "CLOVA_SPEECH_LONG_INVOKE_URL or CLOVA_SPEECH_LONG_SECRET_KEY is not configured in environment variables."
+            )
+            
+        # Short-form API credentials
+        self.short_invoke_url = os.getenv("CLOVA_SPEECH_SHORT_INVOKE_URL")
+        self.short_secret = os.getenv("CLOVA_SPEECH_SHORT_SECRET_KEY")
+        if not self.short_invoke_url or not self.short_secret:
+            raise ValueError(
+                "CLOVA_SPEECH_SHORT_INVOKE_URL or CLOVA_SPEECH_SHORT_SECRET_KEY is not configured in environment variables."
             )
 
-    def recognize(self, audio_data: bytes, language="ko-KR") -> dict | None:
+    def recognize_long(self, audio_data: bytes, language="ko-KR") -> dict | None:
         """
-        Recognizes speech from in-memory audio bytes using the /recognizer/upload endpoint.
+        Recognizes speech from in-memory audio bytes using the /recognizer/upload endpoint (for long audio).
         This method uses a synchronous call and includes diarization.
 
         :param audio_data: The audio data in bytes (WAV format recommended).
@@ -37,93 +45,70 @@ class ClovaSpeechClient:
             "language": language,
             "completion": "sync",
             "wordAlignment": True,
-            "diarization": {
-                "enable": True,
-                "speakerCountMin": 1,
-                "speakerCountMax": 4,
-            },
+            "diarization": { "enable": True, "speakerCountMin": 1, "speakerCountMax": 4 },
         }
 
         headers = {
             "Accept": "application/json;UTF-8",
-            "X-CLOVASPEECH-API-KEY": self.secret,
+            "X-CLOVASPEECH-API-KEY": self.long_secret,
         }
 
         files = {
             "media": ("media.wav", audio_data, "audio/wav"),
-            "params": (
-                None,
-                json.dumps(request_body, ensure_ascii=False).encode("UTF-8"),
-                "application/json",
-            ),
+            "params": (None, json.dumps(request_body, ensure_ascii=False).encode("UTF-8"), "application/json"),
         }
 
-        url = self.invoke_url + "/recognizer/upload"
+        url = self.long_invoke_url + "/recognizer/upload"
 
         try:
-            print(f"Sending multipart/form-data request to {url}...")
-            response = requests.post(
-                headers=headers, url=url, files=files, timeout=60
-            )
+            print(f"Sending long-form STT request to {url}...")
+            response = requests.post(headers=headers, url=url, files=files, timeout=60)
             response.raise_for_status()
-
-            response_data = response.json()
-            print("Clova API response received successfully.")
-            return response_data
-
+            return response.json()
         except requests.exceptions.HTTPError as e:
-            print(f"Clova API HTTP Error: {e}")
+            print(f"Clova Long API HTTP Error: {e}")
             if e.response:
                 try:
                     error_details = e.response.json()
                     print(f"Error Details: {error_details}")
                 except json.JSONDecodeError:
-                    print(
-                        f"Could not parse error response. Status: {e.response.status_code}, Body: {e.response.text}"
-                    )
+                    print(f"Could not parse error response. Status: {e.response.status_code}, Body: {e.response.text}")
             return None
         except Exception as e:
-            print(f"An unexpected error occurred during Clova API call: {e}")
+            print(f"An unexpected error occurred during Clova Long API call: {e}")
             return None
 
-    def get_transcribed_text(self, audio_data: bytes, language="ko-KR") -> str | None:
+    def recognize_short(self, audio_data: bytes, language="ko-KR") -> str | None:
         """
-        A wrapper around recognize() to extract only the final transcribed text.
+        Recognizes speech from audio data using the short-form recognition API (for short audio, < 60s).
+        This method sends raw audio data.
+        
+        :param audio_data: Raw audio data in bytes.
+        :param language: The language code for recognition.
+        :return: The transcribed text string, or None if an error occurs.
         """
-        result = self.recognize(audio_data, language)
-        if result:
+        headers = {
+            "X-CLOVASPEECH-API-KEY": self.short_secret,
+            "Content-Type": "application/octet-stream",
+        }
+        
+        url = self.short_invoke_url + "/recognizer"
+
+        try:
+            print(f"Sending short-form STT request to {url}...")
+            response = requests.post(url, params={"lang": language}, headers=headers, data=audio_data, timeout=20)
+            response.raise_for_status()
+            result = response.json()
             return result.get("text")
-        return None
-
-
-class ClovaSTTProvider:
-    def __init__(self):
-        self.client = ClovaSpeechClient()
-
-    def streaming(self, audio_bytes):
-        # Clova는 동기 방식만 지원하므로 streaming도 sync로 처리
-        result = self.client.recognize(audio_bytes)
-        if result and 'text' in result:
-            return result['text']
-        return ""
-
-    def sync(self, audio_bytes):
-        result = self.client.recognize(audio_bytes)
-        # If diarization segments are present, print and return them
-        if result and 'segments' in result:
-            print('=== Clova diarization segments ===')
-            segments = []
-            for i, segment in enumerate(result['segments']):
-                text = segment.get('text', '').strip()
-                speaker_id = segment.get('speaker')
-                start = segment.get('start')
-                end = segment.get('end')
-                print(f"[Segment {i+1}] Speaker: {speaker_id} | Start: {start} | End: {end} | Text: {text}")
-                if text:
-                    segments.append({'speaker': speaker_id, 'text': text, 'start': start, 'end': end})
-            print(f"STT with diarization: {len(segments)} segments found.")
-            return segments
-        # Fallback: return text only
-        if result and 'text' in result:
-            return [{'speaker': None, 'text': result['text'], 'start': None, 'end': None}]
-        return []
+        except requests.exceptions.HTTPError as e:
+            print(f"Clova Short API HTTP Error: {e}")
+            if e.response:
+                try:
+                    error_details = e.response.json()
+                    print(f"Error Details: {error_details}")
+                except json.JSONDecodeError:
+                    print(f"Could not parse error response. Status: {e.response.status_code}, Body: {e.response.text}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred during Clova Short API call: {e}")
+            return None 

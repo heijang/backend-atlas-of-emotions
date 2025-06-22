@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.endpoints.api_user import router as api_user_router
 from app.endpoints.api_analyze import router as api_analyze_router
 from app.endpoints.api_report import router as api_report_router
-from app.endpoints.ws_user import router as ws_user_router
+from app.endpoints.ws_user_voice import router as ws_user_router
 from app.endpoints.ws_analyze import router as ws_analyze_router
 import uvicorn
 
