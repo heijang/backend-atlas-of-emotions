@@ -118,9 +118,14 @@ class AnalyzeService:
         clova_end = time.time()
         print(f"[Clova 분석] 요청 종료: {clova_end}, 소요시간: {clova_end - clova_start:.2f}초")
 
-        if not isinstance(final_result, list):
-            print(f"[최종 STT] {final_result}")
+        print(f"[최종 STT] {final_result}")
+
+        # `final_result`가 없거나 'segments'가 비어있으면 처리를 중단합니다.
+        if not final_result or not final_result.get("segments"):
+            print("후처리할 STT 세그먼트가 없습니다.")
             return
+
+        segments = final_result["segments"]
 
         print("[최종 STT - Clova diarization 결과]")
         user_uid = user_service.get_user_uid_by_user_id(user_id or "test_user")
@@ -129,14 +134,14 @@ class AnalyzeService:
 
         user_embedding = user_voice_embeddings_mem.get(user_id)
         
-        segment_timestamps = [(seg.get('start') / 1000, seg.get('end') / 1000) for seg in final_result]
+        segment_timestamps = [(seg.get('start') / 1000, seg.get('end') / 1000) for seg in segments]
         segment_dir = get_storage_audio_path(f"segments/{ts}_{sid}")
         segment_files = cut_wav_by_timestamps(wav_path, segment_timestamps, segment_dir)
         print(f"[문장별 오디오 컷팅 경로] {segment_files}")
 
         # Gemini에 전달할 대화 세그먼트 리스트 생성
         conversation_for_gemini = []
-        for i, seg in enumerate(final_result):
+        for i, seg in enumerate(segments):
             text = seg.get('text')
             if not text:
                 continue
@@ -162,7 +167,7 @@ class AnalyzeService:
         emotion_results_list = analyze_conversation_emotions(conversation_for_gemini)
 
         # 분석 결과와 원본 데이터를 조합하여 DB에 저장
-        for i, seg in enumerate(final_result):
+        for i, seg in enumerate(segments):
             if i >= len(emotion_results_list): break
 
             emotion_result = emotion_results_list[i]
