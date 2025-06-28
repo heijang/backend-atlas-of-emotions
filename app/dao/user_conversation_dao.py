@@ -114,14 +114,15 @@ class UserConversationDAO(PostgresDAO):
 
     def get_conversation_list_by_user_uid(self, user_uid: int):
         query = "SELECT uid, topic, created_at FROM user_conversation_master WHERE user_uid = %s ORDER BY created_at DESC"
-        results = self.execute_query(query, (user_uid,), fetch_mode="fetchall")
+        print(f"[쿼리] {query.strip()}\n[파라미터] user_uid={user_uid}")
+        results = self.execute_query(query, (user_uid,))
         return [
             {"uid": r[0], "topic": r[1], "created_at": str(r[2])} for r in results
         ]
 
     def get_conversation_details_by_master_uid(self, master_uid: int):
         query = "SELECT speaker_name, is_user, text, start_time, end_time, emotion_result, dominant_emotion, audio_path, created_at FROM user_conversation_detail WHERE master_uid = %s ORDER BY start_time"
-        results = self.execute_query(query, (master_uid,), fetch_mode="fetchall")
+        results = self.execute_query(query, (master_uid,))
         return [
             {
                 "speaker_name": r[0],

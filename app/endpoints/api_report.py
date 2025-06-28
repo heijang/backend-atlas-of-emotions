@@ -8,6 +8,7 @@ router = APIRouter()
 def get_report_list(user_uid: int = Query(...)):
     try:
         reports = report_service.get_report_list(user_uid)
+        print(reports)
         return JSONResponse(content={"success": True, "data": reports})
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
